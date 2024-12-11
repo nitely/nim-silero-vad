@@ -44,6 +44,16 @@ doAssert dtr.detect(samples) ==
 
 Note last segment endAt is 0 if the data does not have silence at the end.
 
+## Notes
+
+This library expects 16kHz samplerate and mono audio.
+
+Use this command to convert audio files into the expected format:
+
+```
+ffmpeg -i audio_src.wav -ar 16000 -ac 1 audio_dest.wav
+```
+
 ## LICENSE
 
 MIT
