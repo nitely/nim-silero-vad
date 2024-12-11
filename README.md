@@ -44,6 +44,10 @@ doAssert dtr.detect(samples) ==
 
 Note last segment endAt is 0 if the data does not have silence at the end.
 
+## Examples
+
+- [Real-time speech to text](https://github.com/nitely/speech-to-text/blob/master/src/app.nim)
+
 ## Notes
 
 This library expects 16kHz samplerate and mono audio.
