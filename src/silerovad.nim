@@ -202,7 +202,7 @@ proc infer(dtr: var Detector, pcm2: openArray[float32]): float32 =
 
 proc detect*(dtr: var Detector, pcm: seq[float32]): seq[Segment] =
   let windowSize = 512'i32
-  doAssert pcm.len >= windowSize, "not enough samples"
+  check pcm.len >= windowSize, "not enough samples"
   let minSilenceSamples = dtr.cfg.minSilenceDurationMs * dtr.cfg.sampleRate div 1000
   let speechPadSamples = dtr.cfg.speechPadMs * dtr.cfg.sampleRate div 1000
   result = newSeq[Segment]()
