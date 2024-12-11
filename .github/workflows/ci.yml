@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  test:
+    name: Nim ${{ matrix.nim }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        nim: [2.2.0]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run Tests
+      run: |
+        docker pull nimlang/nim:${{ matrix.nim }}
+        docker run --env-file .env  --rm -v `pwd`:/usr/src/app -w /usr/src/app nimlang/nim:${{ matrix.nim }} \
+        /bin/bash -c "git config --global --add safe.directory /usr/src/app && \
+          wget https://github.com/microsoft/onnxruntime/releases/download/v1.20.1/onnxruntime-linux-x64-1.20.1.tgz && \
+          tar -xvzf onnxruntime-linux-x64-1.20.1.tgz && \
+          cp onnxruntime-linux-x64-1.20.1/lib/libonnxruntime.so* /usr/local/lib/ && \
+          ldconfig && \
+          ldconfig -p | grep libonnxruntime && \
+          nimble install -y && \
+          nimble test"
+
