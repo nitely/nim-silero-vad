@@ -24,21 +24,23 @@ Use `-d:silerovadNoDynLib` if you want to avoid dynamic linking.
 ```nim
 import pkg/silerovad
 
+let samples = readWav("./samples/jfk.wav")
 let cfg = newDetectorConfig(
   modelPath = "./models/silero_vad.onnx",
   sampleRate = 16000,
   threshold = 0.5,
-  minSilenceDurationMs = 0,
-  speechPadMs = 0,
+  minSilenceDurationMs = 100,
+  speechPadMs = 30,
   logLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING
 )
 var dtr = newDetector(cfg)
-let samples = readSamples("./samples/samples.pcm")
 doAssert dtr.detect(samples) ==
   @[
-    Segment(startAt: 1.056, endAt: 1.632),
-    Segment(startAt: 2.88, endAt: 3.232),
-    Segment(startAt: 4.448, endAt: 0.0)
+    Segment(startAt: 0.29, endAt: 2.238),  # And so my fellow Americans
+    Segment(startAt: 3.586, endAt: 3.774),  # ask
+    Segment(startAt: 4.002, endAt: 4.382),  # not
+    Segment(startAt: 5.378, endAt: 7.678),  # what your country can do for you
+    Segment(startAt: 8.162, endAt: 10.654)  # ask what you can do for your country
   ]
 ```
 

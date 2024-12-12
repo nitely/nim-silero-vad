@@ -55,7 +55,8 @@ proc newDetectorConfig*(
   logLevel: OrtLoggingLevel
 ): DetectorConfig =
   check modelPath.len > 0, "empty model path"
-  check sampleRate == 16000 or sampleRate == 8000, "supported samplerates: 16000, 8000"
+  # XXX add 8000 samplerate support
+  check sampleRate == 16000, "supported samplerates: 16000"
   check threshold in 0'f32 .. 1'f32, "threshold must be between 0 and 1"
   check minSilenceDurationMs >= 0, "min silence cannot be negative"
   check speechPadMs >= 0, "speech pad cannot be negative"
@@ -85,7 +86,6 @@ type
     memoryInfo: ptr OrtMemoryInfo
     cfg: DetectorConfig
     state: array[256, float32]
-    ctx: array[64, float32]
     currSample: int32
     triggered: bool
     tempEnd: int32
@@ -138,25 +138,12 @@ proc newDetector*(cfg: DetectorConfig): Detector =
     memoryInfo: memoryInfo,
     cfg: cfg,
     state: default(array[256, float32]),
-    ctx: default(array[64, float32]),
     currSample: 0'i32,
     triggered: false,
     tempEnd: 0'i32
   )
 
-type
-  Segment* = object
-    startAt*, endAt*: float64
-
-proc infer(dtr: var Detector, pcm2: openArray[float32]): float32 =
-  var pcm = newSeqOfCap[float32](pcm2.len+dtr.ctx.len)
-  if dtr.currSample > 0:
-    for i in 0 .. dtr.ctx.len-1:
-      pcm.add dtr.ctx[i]
-  pcm.add pcm2
-  doAssert pcm2.len >= dtr.ctx.len
-  for i in 0 .. dtr.ctx.len-1:
-    dtr.ctx[i] = pcm2[pcm2.len-dtr.ctx.len+i]
+proc infer(dtr: var Detector, pcm: openArray[float32]): float32 =
   var pcmValue: ptr OrtValue = nil
   defer: dtr.api.ReleaseValue(pcmValue)
   let pcmInputDims = [1'i64, pcm.len]
@@ -200,16 +187,29 @@ proc infer(dtr: var Detector, pcm2: openArray[float32]): float32 =
   copyMem(addr dtr.state[0], stateN, dtr.state.len*4)
   return cast[ptr float32](prob)[]
 
+type
+  Segment* = object
+    startAt*, endAt*: float64
+
+proc reset(dtr: var Detector) =
+  dtr.currSample = 0
+  dtr.triggered = false
+  dtr.tempEnd = 0
+  for i in 0 .. dtr.state.len-1:
+    dtr.state[i] = 0
+
 proc detect*(dtr: var Detector, pcm: seq[float32]): seq[Segment] =
   let windowSize = 512'i32
   check pcm.len >= windowSize, "not enough samples"
   let minSilenceSamples = dtr.cfg.minSilenceDurationMs * dtr.cfg.sampleRate div 1000
   let speechPadSamples = dtr.cfg.speechPadMs * dtr.cfg.sampleRate div 1000
+  let ctxSize = 64
+  dtr.reset()
   result = newSeq[Segment]()
   let L = len(pcm)-windowSize
   var i = 0
   while i < L:
-    let speechProb = dtr.infer(toOpenArray(pcm, i, i+windowSize-1))
+    let speechProb = dtr.infer(toOpenArray(pcm, max(0, i-ctxSize), i+windowSize-1))
     dtr.currSample += windowSize
     if speechProb >= dtr.cfg.threshold and dtr.tempEnd != 0:
       dtr.tempEnd = 0
@@ -229,15 +229,6 @@ proc detect*(dtr: var Detector, pcm: seq[float32]): seq[Segment] =
         doAssert result.len > 0
         result[^1].endAt = speechEndAt
     i += windowSize
-
-proc reset*(dtr: var Detector) =
-  dtr.currSample = 0
-  dtr.triggered = false
-  dtr.tempEnd = 0
-  for i in 0 .. dtr.state.len-1:
-    dtr.state[i] = 0
-  for i in 0 .. dtr.ctx.len-1:
-    dtr.ctx[i] = 0
 
 when isMainModule:
   func toFloat32(x: array[4, uint8]): float32 =
@@ -268,7 +259,6 @@ when isMainModule:
         Segment(startAt: 2.88, endAt: 3.232),
         Segment(startAt: 4.448, endAt: 0.0)
       ]
-  dtr.reset()
   block:
     let samples2 = readSamples("./samples/samples2.pcm")
     doAssert dtr.detect(samples2) ==
@@ -276,7 +266,6 @@ when isMainModule:
         Segment(startAt: 3.008, endAt: 6.24),
         Segment(startAt: 7.072, endAt: 8.16)
       ]
-  dtr.reset()
   block:
     cfg.speechPadMs = 10
     let samples = readSamples("./samples/samples.pcm")
